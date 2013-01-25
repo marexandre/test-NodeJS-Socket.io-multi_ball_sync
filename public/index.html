@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,minimum-scale=1.0,user-scalable=no">
+    <title>NodeJS & Socket.io Multi Ball Sync Sample</title>
+
+    <style type="text/css">
+        html, body { margin: 0; padding: 0; }
+        .circle {
+            width: 80px;
+            height: 80px;
+            display: block;
+            border-radius: 40px;
+            background-color: #F00;
+            position: absolute;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="baseCircle"></div>
+
+    <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.9.0/jquery.min.js"></script>
+    <script type="text/javascript" src="/socket.io/socket.io.js"></script>
+    <script>
+    
+        var $circle, $body;
+        var thisID = '';
+        var socket = io.connect('http://'+ location.hostname);
+
+        // whent user connects.
+        socket.on('connect', function() {
+            console.log('connected');
+
+            thisID = socket.socket.sessionid;
+            console.log( "thisID : "+ thisID );
+
+            // add this user circle.
+            $body.append(
+                $('.baseCircle')
+                    .clone()
+                    .removeClass('baseCircle')
+                    .addClass('circle '+thisID)
+                    .css({
+                        top    : 0,
+                        left   : 0,
+                        opacity: 1,
+                        display: 'block'
+                    })                
+            );
+        });
+
+        // add user to screen.
+        socket.on('add', function(data){
+            console.log( data );
+
+            // add all other users circle.
+            for(var userID in data) {
+                // console.log( userID );
+                if ( thisID !== userID && $('.circle.'+userID).size() === 0) {
+                    $body.append(
+                        $('.baseCircle')
+                            .clone()
+                            .removeClass('baseCircle')
+                            .addClass('circle '+userID)
+                            .css({
+                                top    : data[userID].y,
+                                left   : data[userID].x,
+                                opacity: (thisID === userID) ? 1 : 0.2,
+                                display: 'block'
+                            })
+                    );
+                }
+            }
+        });
+
+        socket.on('move', function(data){
+            // console.log( data );
+
+            for(var userID in data) {
+                $('.'+userID).css({
+                    top: data[userID].y,
+                    left: data[userID].x
+                });
+            }
+        });
+
+        socket.on('user disconnected', function(userID){
+            $('.'+ userID).remove();
+        });
+
+        
+        var _touchSupport = ("ontouchstart" in window);
+        console.log( 'touch support : '+ _touchSupport );
+        var events = {
+            move : _touchSupport ? 'touchmove' : 'mousemove',
+            start: _touchSupport ? 'touchstart': 'mousedown',
+            end  : _touchSupport ? 'touchend'  : 'mouseup'
+        };        
+
+        // 
+        $(function(){
+
+            $body = $('body');
+
+            $(window)
+                .on(events.start, function(e){
+                    e.preventDefault();
+
+                    var xy = _getXY(e);
+                    socket.emit('move', {id: thisID, x: xy.x - 40, y: xy.y - 40 })
+
+                    $(this).on(events.move, _onMove);
+                })
+                .on(events.end, function(e){
+                    e.preventDefault();
+
+                    var xy = _getXY(e);
+                    socket.emit('move', {id: thisID, x: xy.x - 40, y: xy.y - 40 })
+
+                    $(this).off(events.move, _onMove);
+                });
+                
+
+            var _onMove = function(e){
+                e.preventDefault();
+
+                var xy = _getXY(e);
+                socket.emit('move', {id: thisID, x: xy.x - 40, y: xy.y - 40 })
+            };
+
+            var _getXY = function(/* MouseEvent */ e) {
+                var touches = e.originalEvent && e.originalEvent.touches ? e.originalEvent.touches : [],
+                    x = 0, y = 0;
+
+                if ( _touchSupport && 0 < touches.length ) {
+                    x = touches[0].pageX;
+                    y = touches[0].pageY;
+                }
+                else {
+                    x = e.pageX;
+                    y = e.pageY;
+                }
+
+                return { x: x, y: y };
+            }
+
+        });
+    </script>
+</body>
+</html>
